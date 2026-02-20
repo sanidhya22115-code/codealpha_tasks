@@ -1,0 +1,354 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.util.*;
+
+// SECTION 1: REAL-TIME VIDEO INPUT - Webcam/Video capture simulation
+class VideoCapture {
+    private int frameWidth = 640;
+    private int frameHeight = 480;
+    private int fps = 30;
+    private List<FrameData> videoFrames;
+    
+    public VideoCapture() {
+        videoFrames = new ArrayList<>();
+        generateDemoFrames();
+    }
+    
+    private void generateDemoFrames() {
+        // Simulate 100 frames with moving objects
+        Random rand = new Random(42);
+        for (int frameId = 0; frameId < 100; frameId++) {
+            FrameData frame = new FrameData(frameId);
+            
+            // Person moving left→right
+            frame.addObject(new DetectedObject("person", 
+                100 + frameId * 5, 200, 80, 180, rand.nextFloat()));
+            
+            // Car moving top→bottom  
+            frame.addObject(new DetectedObject("car",
+                300, 50 + frameId * 3, 120, 60, rand.nextFloat()));
+                
+            videoFrames.add(frame);
+        }
+    }
+    
+    public FrameData getNextFrame(int frameId) {
+        return frameId < videoFrames.size() ? videoFrames.get(frameId) : null;
+    }
+    
+    public int getTotalFrames() { return videoFrames.size(); }
+}
+
+class FrameData {
+    private int frameId;
+    private List<DetectedObject> objects;
+    
+    public FrameData(int frameId) {
+        this.frameId = frameId;
+        this.objects = new ArrayList<>();
+    }
+    
+    public void addObject(DetectedObject obj) { objects.add(obj); }
+    public List<DetectedObject> getObjects() { return objects; }
+    public int getFrameId() { return frameId; }
+}
+
+// SECTION 2: YOLO OBJECT DETECTION - Pre-trained model simulation
+class YOLODetector {
+    private Map<String, Double> confidenceThresholds;
+    
+    public YOLODetector() {
+        confidenceThresholds = Map.of(
+            "person", 0.85, "car", 0.80, "bicycle", 0.75, 
+            "dog", 0.82, "cat", 0.78, "truck", 0.88
+        );
+    }
+    
+    public List<DetectedObject> detectObjects(FrameData frame) {
+        List<DetectedObject> detections = new ArrayList<>();
+        
+        // Simulate YOLOv8 detections (80 COCO classes)
+        Random rand = new Random(frame.getFrameId());
+        String[] commonObjects = {"person", "car", "bicycle", "dog", "cat", "truck"};
+        
+        for (int i = 0; i < 3 + rand.nextInt(3); i++) {
+            String objClass = commonObjects[rand.nextInt(commonObjects.length)];
+            double confidence = 0.6 + rand.nextFloat() * 0.3;
+            
+            if (confidence > confidenceThresholds.getOrDefault(objClass, 0.7)) {
+                // Simulate bounding box positions
+                int x = 50 + rand.nextInt(500);
+                int y = 50 + rand.nextInt(300);
+                int w = 60 + rand.nextInt(100);
+                int h = 80 + rand.nextInt(120);
+                
+                detections.add(new DetectedObject(objClass, x, y, w, h, (float)confidence));
+            }
+        }
+        return detections;
+    }
+}
+
+class DetectedObject {
+    private String className;
+    private int x, y, width, height;
+    private float confidence;
+    private int trackingId;
+    
+    public DetectedObject(String className, int x, int y, int w, int h, float confidence) {
+        this.className = className;
+        this.x = x; this.y = y; this.width = w; this.height = h;
+        this.confidence = confidence;
+        this.trackingId = -1;
+    }
+    
+    // Getters
+    public String getClassName() { return className; }
+    public int getX() { return x; } public int getY() { return y; }
+    public int getWidth() { return width; } public int getHeight() { return height; }
+    public float getConfidence() { return confidence; }
+    public int getTrackingId() { return trackingId; }
+    public void setTrackingId(int id) { trackingId = id; }
+    
+    public double getCenterX() { return x + width / 2.0; }
+    public double getCenterY() { return y + height / 2.0; }
+}
+
+// SECTION 3: OBJECT TRACKING - SORT algorithm implementation
+class ObjectTracker {
+    private Map<Integer, TrackedObject> activeTracks;
+    private int nextTrackId;
+    private double maxDistance = 100; // pixels
+    
+    public ObjectTracker() {
+        activeTracks = new HashMap<>();
+        nextTrackId = 1;
+    }
+    
+    public List<DetectedObject> update(List<DetectedObject> detections) {
+        List<TrackedObject> tracks = new ArrayList<>(activeTracks.values());
+        List<DetectedObject> trackedDetections = new ArrayList<>();
+        
+        // Hungarian algorithm simulation (greedy matching)
+        for (DetectedObject detection : detections) {
+            TrackedObject bestMatch = null;
+            double minDistance = Double.MAX_VALUE;
+            
+            for (TrackedObject track : tracks) {
+                double dist = calculateDistance(track, detection);
+                if (dist < minDistance && dist < maxDistance) {
+                    minDistance = dist;
+                    bestMatch = track;
+                }
+            }
+            
+            if (bestMatch != null) {
+                // Update existing track
+                bestMatch.update(detection);
+                detection.setTrackingId(bestMatch.getId());
+                trackedDetections.add(detection);
+            } else {
+                // New track
+                detection.setTrackingId(nextTrackId++);
+                activeTracks.put(detection.getTrackingId(), new TrackedObject(detection));
+                trackedDetections.add(detection);
+            }
+        }
+        
+        // Remove expired tracks
+        activeTracks.entrySet().removeIf(entry -> 
+            entry.getValue().getAge() > 30);
+            
+        return trackedDetections;
+    }
+    
+    private double calculateDistance(TrackedObject track, DetectedObject detection) {
+        double dx = track.getCenterX() - detection.getCenterX();
+        double dy = track.getCenterY() - detection.getCenterY();
+        return Math.sqrt(dx*dx + dy*dy);
+    }
+}
+
+class TrackedObject {
+    private int id;
+    private double centerX, centerY;
+    private int age;
+    
+    public TrackedObject(DetectedObject detection) {
+        this.id = detection.getTrackingId();
+        this.centerX = detection.getCenterX();
+        this.centerY = detection.getCenterY();
+        this.age = 0;
+    }
+    
+    public void update(DetectedObject detection) {
+        this.centerX = detection.getCenterX();
+        this.centerY = detection.getCenterY();
+        this.age++;
+    }
+    
+    public int getId() { return id; }
+    public double getCenterX() { return centerX; }
+    public double getCenterY() { return centerY; }
+    public int getAge() { return age; }
+}
+
+// SECTION 4: VIDEO PROCESSING PIPELINE - Frame → Detect → Track → Display
+class VideoProcessor {
+    private YOLODetector detector;
+    private ObjectTracker tracker;
+    
+    public VideoProcessor() {
+        detector = new YOLODetector();
+        tracker = new ObjectTracker();
+    }
+    
+    public ProcessedFrame processFrame(FrameData frame) {
+        // 1. YOLO Detection
+        List<DetectedObject> detections = detector.detectObjects(frame);
+        
+        // 2. SORT Tracking
+        List<DetectedObject> trackedObjects = tracker.update(detections);
+        
+        return new ProcessedFrame(frame.getFrameId(), trackedObjects);
+    }
+}
+
+class ProcessedFrame {
+    private int frameId;
+    private List<DetectedObject> trackedObjects;
+    
+    public ProcessedFrame(int frameId, List<DetectedObject> objects) {
+        this.frameId = frameId;
+        this.trackedObjects = objects;
+    }
+    
+    public int getFrameId() { return frameId; }
+    public List<DetectedObject> getTrackedObjects() { return trackedObjects; }
+}
+
+// SECTION 5: REAL-TIME DISPLAY - GUI with bounding boxes & tracking IDs
+class DetectionDisplay extends JPanel {
+    private ProcessedFrame currentFrame;
+    
+    public void updateFrame(ProcessedFrame frame) {
+        this.currentFrame = frame;
+        repaint();
+    }
+    
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        Graphics2D g2d = (Graphics2D) g;
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        
+        if (currentFrame == null) return;
+        
+        int frameId = currentFrame.getFrameId();
+        g2d.setColor(Color.BLACK);
+        g2d.fillRect(0, 0, 800, 600);
+        
+        // Draw objects with tracking
+        Map<String, Integer> classCounts = new HashMap<>();
+        for (DetectedObject obj : currentFrame.getTrackedObjects()) {
+            classCounts.put(obj.getClassName(), classCounts.getOrDefault(obj.getClassName(), 0) + 1);
+            
+            // Bounding box
+            g2d.setColor(getClassColor(obj.getClassName()));
+            g2d.setStroke(new BasicStroke(3));
+            g2d.drawRect(obj.getX(), obj.getY(), obj.getWidth(), obj.getHeight());
+            
+            // Tracking ID & Confidence
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font("Arial", Font.BOLD, 16));
+            String label = String.format("%s #%d (%.1f%%)", 
+                obj.getClassName(), obj.getTrackingId(), obj.getConfidence()*100);
+            g2d.drawString(label, obj.getX(), obj.getY() - 5);
+        }
+        
+        // Stats overlay
+        g2d.setColor(new Color(0, 0, 0, 180));
+        g2d.fillRoundRect(10, 10, 300, 120, 15, 15);
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(new Font("Arial", Font.BOLD, 18));
+        g2d.drawString("Frame: " + frameId, 20, 40);
+        g2d.drawString("Objects: " + currentFrame.getTrackedObjects().size(), 20, 70);
+        
+        for (Map.Entry<String, Integer> entry : classCounts.entrySet()) {
+            g2d.drawString(entry.getKey() + ": " + entry.getValue(), 20, 100 + entry.hashCode() % 20);
+        }
+    }
+    
+    private Color getClassColor(String className) {
+        return switch (className) {
+            case "person" -> new Color(255, 0, 0);
+            case "car" -> new Color(0, 255, 0);
+            case "bicycle" -> new Color(0, 0, 255);
+            case "dog", "cat" -> new Color(255, 255, 0);
+            default -> Color.WHITE;
+        };
+    }
+}
+
+// SECTION 6: MAIN APPLICATION - Real-time processing loop
+public class RealTimeObjectTracker extends JFrame {
+    private VideoCapture capture;
+    private VideoProcessor processor;
+    private DetectionDisplay display;
+    private JLabel fpsLabel;
+    private Timer timer;
+    
+    public RealTimeObjectTracker() {
+        capture = new VideoCapture();
+        processor = new VideoProcessor();
+        initializeUI();
+        startProcessing();
+    }
+    
+    private void initializeUI() {
+        setTitle(" Real-Time Object Detection & Tracking - YOLO + SORT");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(900, 700);
+        setLocationRelativeTo(null);
+        
+        display = new DetectionDisplay();
+        fpsLabel = new JLabel("FPS: 30 | Status: Ready");
+        
+        JPanel controlPanel = new JPanel();
+        controlPanel.add(new JButton(" Pause"));
+        controlPanel.add(new JButton(" Snapshot"));
+        controlPanel.add(fpsLabel);
+        
+        setLayout(new BorderLayout());
+        add(display, BorderLayout.CENTER);
+        add(controlPanel, BorderLayout.SOUTH);
+    }
+    
+    private void startProcessing() {
+        timer = new Timer(33, e -> processNextFrame()); // ~30 FPS
+        timer.start();
+    }
+    
+    private void processNextFrame() {
+        static int frameCounter = 0;
+        FrameData rawFrame = capture.getNextFrame(frameCounter % capture.getTotalFrames());
+        
+        if (rawFrame != null) {
+            ProcessedFrame processed = processor.processFrame(rawFrame);
+            display.updateFrame(processed);
+            
+            fpsLabel.setText(String.format("FPS: %.1f | Frame: %d | Objects: %d", 
+                30.0, processed.getFrameId(), processed.getTrackedObjects().size()));
+        }
+        
+        frameCounter++;
+    }
+    
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            System.out.println("🚀 Starting Real-Time Object Detection & Tracking...");
+            new RealTimeObjectTracker().setVisible(true);
+        });
+    }
+}

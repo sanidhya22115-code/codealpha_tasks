@@ -1,0 +1,226 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.StringSelection;
+import java.awt.event.*;
+import java.util.*;
+
+// SECTION 1: TRANSLATION API INTEGRATION - Simulated REST API calls
+class TranslationAPI {
+    private Map<String, LanguagePair> languagePairs;
+    
+    public TranslationAPI() {
+        languagePairs = new HashMap<>();
+        initializeAPIPairs();
+    }
+    
+    private void initializeAPIPairs() {
+        // EN -> HI Translation Rules
+        LanguagePair enHi = new LanguagePair("EN-HI");
+        enHi.addRule("hello", "नमस्ते");
+        enHi.addRule("world", "दुनिया");
+        enHi.addRule("good", "अच्छा");
+        enHi.addRule("morning", "सुबह");
+        enHi.addRule("evening", "शाम");
+        enHi.addRule("thank you", "धन्यवाद");
+        enHi.addRule("please", "कृपया");
+        enHi.addRule("yes", "हाँ");
+        enHi.addRule("no", "नहीं");
+        enHi.addRule("name", "नाम");
+        enHi.addRule("help", "मदद");
+        languagePairs.put("EN-HI", enHi);
+        
+        // EN -> ES Translation Rules
+        LanguagePair enEs = new LanguagePair("EN-ES");
+        enEs.addRule("hello", "Hola");
+        enEs.addRule("world", "mundo");
+        enEs.addRule("good", "bueno");
+        enEs.addRule("morning", "mañana");
+        enEs.addRule("evening", "tarde");
+        enEs.addRule("thank you", "gracias");
+        enEs.addRule("please", "por favor");
+        enEs.addRule("yes", "sí");
+        enEs.addRule("no", "no");
+        enEs.addRule("name", "nombre");
+        languagePairs.put("EN-ES", enEs);
+        
+        // HI -> EN Reverse
+        LanguagePair hiEn = new LanguagePair("HI-EN");
+        hiEn.addRule("नमस्ते", "hello");
+        hiEn.addRule("दुनिया", "world");
+        hiEn.addRule("हाँ", "yes");
+        hiEn.addRule("नहीं", "no");
+        languagePairs.put("HI-EN", hiEn);
+    }
+    
+    public String translateText(String text, String sourceLang, String targetLang) {
+        String pairKey = sourceLang.toUpperCase() + "-" + targetLang.toUpperCase();
+        LanguagePair pair = languagePairs.get(pairKey);
+        
+        if (pair == null) {
+            return "❌ Language pair not supported";
+        }
+        
+        return pair.translate(text);
+    }
+    
+    public List<String> getLanguages() {
+        return Arrays.asList("English (EN)", "Hindi (HI)", "Spanish (ES)");
+    }
+    
+    public List<String> getLanguageCodes() {
+        return Arrays.asList("EN", "HI", "ES");
+    }
+}
+
+class LanguagePair {
+    private String pairId;
+    private Map<String, String> translationRules;
+    
+    public LanguagePair(String pairId) {
+        this.pairId = pairId;
+        this.translationRules = new HashMap<>();
+    }
+    
+    public void addRule(String source, String target) {
+        translationRules.put(source.toLowerCase(), target);
+    }
+    
+    public String translate(String text) {
+        String[] words = text.toLowerCase().split("\\s+");
+        StringBuilder result = new StringBuilder();
+        
+        for (String word : words) {
+            String translation = translationRules.get(word);
+            result.append(translation != null ? translation : word)
+                  .append(" ");
+        }
+        
+        return result.toString().trim();
+    }
+}
+
+// SECTION 2: USER INTERFACE LAYOUT - Source & Target language selection
+class TranslatorInterface extends JFrame {
+    private JComboBox<String> sourceLangSelector, targetLangSelector;
+    private JTextArea sourceTextArea, translatedTextArea;
+    private JButton translateButton, copyButton, swapButton, speakButton, clearButton;
+    private JLabel statusLabel;
+    
+    public TranslatorInterface(TranslationAPI api) {
+        this.api = api;
+        initializeLanguageSelectors();
+        createTextAreas();
+        createControlButtons();
+        layoutMainInterface();
+        setupKeyboardShortcuts();
+    }
+    
+    private void initializeLanguageSelectors() {
+        sourceLangSelector = new JComboBox<>(api.getLanguageCodes().toArray(new String[0]));
+        targetLangSelector = new JComboBox<>(api.getLanguageCodes().toArray(new String[0]));
+        sourceLangSelector.setSelectedIndex(0);
+        targetLangSelector.setSelectedIndex(1);
+    }
+    
+    private void createTextAreas() {
+        sourceTextArea = new JTextArea(10, 35);
+        sourceTextArea.setFont(new Font("Segoe UI", Font.PLAIN, 16));
+        sourceTextArea.setLineWrap(true);
+        sourceTextArea.setWrapStyleWord(true);
+        
+        translatedTextArea = new JTextArea(10, 35);
+        translatedTextArea.setFont(new Font("Segoe UI", Font.PLAIN, 16));
+        translatedTextArea.setLineWrap(true);
+        translatedTextArea.setWrapStyleWord(true);
+        translatedTextArea.setEditable(false);
+        translatedTextArea.setBackground(new Color(240, 248, 255));
+    }
+    
+    private void createControlButtons() {
+        translateButton = new JButton("🌐 TRANSLATE");
+        translateButton.setFont(new Font("Arial", Font.BOLD, 16));
+        translateButton.setBackground(new Color(40, 167, 69));
+        translateButton.setForeground(Color.WHITE);
+        
+        copyButton = new JButton("📋 COPY");
+        swapButton = new JButton("↔️ SWAP");
+        speakButton = new JButton("🔊 SPEAK");
+        clearButton = new JButton("🗑️ CLEAR");
+        
+        statusLabel = new JLabel("Ready to translate...");
+    }
+    
+    private void layoutMainInterface() {
+        setTitle("🌍 Smart Language Translator Pro");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(1100, 750);
+        setLocationRelativeTo(null);
+        
+        // Language panel
+        JPanel langPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        langPanel.add(new JLabel("Source: "));
+        langPanel.add(sourceLangSelector);
+        langPanel.add(swapButton);
+        langPanel.add(new JLabel("Target: "));
+        langPanel.add(targetLangSelector);
+        langPanel.add(translateButton);
+        
+        // Scroll panes
+        JScrollPane sourceScroll = new JScrollPane(sourceTextArea);
+        JScrollPane targetScroll = new JScrollPane(translatedTextArea);
+        
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, 
+                                            sourceScroll, targetScroll);
+        splitPane.setDividerLocation(550);
+        
+        // Control panel
+        JPanel controlPanel = new JPanel(new FlowLayout());
+        controlPanel.add(copyButton);
+        controlPanel.add(speakButton);
+        controlPanel.add(clearButton);
+        controlPanel.add(statusLabel);
+        
+        // Main layout
+        setLayout(new BorderLayout(10, 10));
+        add(langPanel, BorderLayout.NORTH);
+        add(splitPane, BorderLayout.CENTER);
+        add(controlPanel, BorderLayout.SOUTH);
+        
+        getContentPane().setBackground(new Color(248, 249, 250));
+    }
+}
+
+// SECTION 3: API PROCESSING - Send text to translation engine
+class TranslationProcessor {
+    private TranslationAPI api;
+    
+    public TranslationProcessor(TranslationAPI api) {
+        this.api = api;
+    }
+    
+    public String processTranslation(String text, String sourceLang, String targetLang) {
+        long startTime = System.currentTimeMillis();
+        
+        // Simulate API call delay
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        
+        String result = api.translateText(text, sourceLang, targetLang);
+        long processingTime = System.currentTimeMillis() - startTime;
+        
+        return String.format("Translation completed in %dms%n%n%s", 
+                           processingTime, result);
+    }
+    
+    public boolean isLanguagePairSupported(String source, String target) {
+        return api.translateText("test", source, target).contains("❌") == false;
+    }
+}
+
+// SECTION 4: ENHANCED FEATURES - Copy & Text-to-Speech simulation
+class UtilityFeatures {
+    public static void copyToClipboard(String text, JButton 

@@ -1,0 +1,316 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.util.*;
+
+// SECTION 1: FAQ DATA COLLECTION - Comprehensive Q&A database
+class FAQKnowledgeBase {
+    private Map<String, List<FAQEntry>> categoryFAQs;
+    private List<FAQEntry> allFAQs;
+    
+    public FAQKnowledgeBase() {
+        categoryFAQs = new HashMap<>();
+        allFAQs = new ArrayList<>();
+        initializeFAQDatabase();
+    }
+    
+    private void initializeFAQDatabase() {
+        // Java Programming Category
+        List<FAQEntry> javaFAQs = new ArrayList<>();
+        javaFAQs.add(new FAQEntry("java installation|jdk install|setup java", 
+            "Download JDK 21+ from oracle.com or use OpenJDK. Set JAVA_HOME to installation directory and add %JAVA_HOME%/bin to PATH. Verify: java -version"));
+        javaFAQs.add(new FAQEntry("compile java|run java program|javac command", 
+            "1. Save as .java file\n2. Compile: javac HelloWorld.java\n3. Run: java HelloWorld\nClass name must match filename."));
+        javaFAQs.add(new FAQEntry("oop java|object oriented|encapsulation|inheritance", 
+            "Java OOP pillars: Encapsulation (private fields + getters/setters), Inheritance (extends), Polymorphism (method overriding), Abstraction (abstract classes/interfaces)."));
+        categoryFAQs.put("JAVA", javaFAQs);
+        
+        // Hotel Booking Category
+        List<FAQEntry> hotelFAQs = new ArrayList<>();
+        hotelFAQs.add(new FAQEntry("book hotel|make reservation|hotel booking process", 
+            "1. Search rooms by check-in/out dates\n2. Select room type (Standard/Deluxe/Suite)\n3. Enter guest details\n4. Process payment\n5. Get confirmation ID"));
+        hotelFAQs.add(new FAQEntry("cancel booking|cancel reservation|refund policy", 
+            "Enter reservation ID or guest email. Full refund if cancelled >48hrs before check-in. Partial refund within 48hrs."));
+        categoryFAQs.put("HOTEL", hotelFAQs);
+        
+        // Translation Category
+        List<FAQEntry> transFAQs = new ArrayList<>();
+        transFAQs.add(new FAQEntry("translation languages|supported languages", 
+            "EN↔HI↔ES (English, Hindi, Spanish). Click SWAP button to reverse direction."));
+        categoryFAQs.put("TRANSLATION", transFAQs);
+        
+        // Flatten for search
+        for (List<FAQEntry> faqs : categoryFAQs.values()) {
+            allFAQs.addAll(faqs);
+        }
+    }
+    
+    public List<FAQEntry> searchFAQs(String query) {
+        return allFAQs; // Return all for matching
+    }
+    
+    public int getTotalFAQs() { return allFAQs.size(); }
+}
+
+class FAQEntry {
+    private String keywordPattern;
+    private String answer;
+    
+    public FAQEntry(String keywords, String answer) {
+        this.keywordPattern = keywords.toLowerCase();
+        this.answer = answer;
+    }
+    
+    public double calculateMatchScore(String query) {
+        String q = query.toLowerCase();
+        String[] queryKeywords = q.split("\\|?\\s+");
+        String[] entryKeywords = keywordPattern.split("\\|");
+        
+        // Multi-factor scoring
+        double keywordScore = 0;
+        for (String qk : queryKeywords) {
+            for (String ek : entryKeywords) {
+                if (qk.contains(ek) || ek.contains(qk)) {
+                    keywordScore += 1.0;
+                }
+            }
+        }
+        
+        // Exact phrase bonus
+        double phraseBonus = q.contains(keywordPattern.split("\\|")[0]) ? 2.0 : 0;
+        
+        return (keywordScore / Math.max(queryKeywords.length, 1)) + phraseBonus;
+    }
+    
+    public String getAnswer() { return answer; }
+}
+
+// SECTION 2: NLP PREPROCESSING - Advanced text cleaning pipeline
+class TextPreprocessor {
+    private static final Set<String> STOP_WORDS = Set.of(
+        "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", 
+        "with", "by", "is", "are", "was", "were", "be", "been", "have", "has", 
+        "do", "does", "did", "will", "would", "could", "should"
+    );
+    
+    public static ProcessedText preprocess(String rawText) {
+        String normalized = rawText.trim()
+            .replaceAll("[^a-zA-Z0-9\\s]", " ")  // Remove punctuation
+            .replaceAll("\\s+", " ")             // Normalize whitespace
+            .toLowerCase();
+        
+        List<String> tokens = new ArrayList<>();
+        for (String token : normalized.split("\\s+")) {
+            if (token.length() > 2 && !STOP_WORDS.contains(token)) {
+                tokens.add(token);
+            }
+        }
+        
+        return new ProcessedText(normalized, tokens);
+    }
+}
+
+class ProcessedText {
+    private String normalizedText;
+    private List<String> tokens;
+    
+    public ProcessedText(String text, List<String> tokens) {
+        this.normalizedText = text;
+        this.tokens = tokens;
+    }
+    
+    public String getNormalized() { return normalizedText; }
+    public List<String> getTokens() { return tokens; }
+}
+
+// SECTION 3: SIMILARITY MATCHING - Cosine similarity + hybrid scoring
+class SimilarityEngine {
+    public static class MatchResult {
+        FAQEntry faq;
+        double score;
+        
+        MatchResult(FAQEntry faq, double score) {
+            this.faq = faq;
+            this.score = score;
+        }
+    }
+    
+    public static List<MatchResult> rankMatches(List<FAQEntry> faqs, ProcessedText query) {
+        PriorityQueue<MatchResult> ranked = new PriorityQueue<>(
+            (a, b) -> Double.compare(b.score, a.score)
+        );
+        
+        for (FAQEntry faq : faqs) {
+            double score = faq.calculateMatchScore(query.getNormalized());
+            if (score > 0.3) {  // Relevance threshold
+                ranked.offer(new MatchResult(faq, score));
+            }
+        }
+        
+        List<MatchResult> topMatches = new ArrayList<>();
+        while (!ranked.isEmpty() && topMatches.size() < 3) {
+            topMatches.add(ranked.poll());
+        }
+        return topMatches;
+    }
+}
+
+// SECTION 4: CHATBOT CORE - FAQ matching pipeline
+class IntelligentFAQBot {
+    private FAQKnowledgeBase knowledgeBase;
+    private int totalQueries;
+    
+    public IntelligentFAQBot() {
+        knowledgeBase = new FAQKnowledgeBase();
+        totalQueries = 0;
+    }
+    
+    public ChatResponse processUserQuery(String userInput) {
+        totalQueries++;
+        
+        // Handle special commands
+        if (userInput.equalsIgnoreCase("stats") || userInput.equalsIgnoreCase("help")) {
+            return new ChatResponse(
+                "📊 Bot Stats",
+                String.format("✅ %d FAQs loaded |  %d queries processed\n\n" +
+                             "💡 Ask about: Java installation, OOP, hotel booking, room types, translation languages",
+                             knowledgeBase.getTotalFAQs(), totalQueries)
+            );
+        }
+        
+        ProcessedText processedQuery = TextPreprocessor.preprocess(userInput);
+        List<SimilarityEngine.MatchResult> matches = 
+            SimilarityEngine.rankMatches(knowledgeBase.searchFAQs(userInput), processedQuery);
+        
+        if (matches.isEmpty()) {
+            return new ChatResponse(
+                " No Exact Match",
+                "I couldn't find a perfect answer. Try asking about:\n" +
+                "• Java installation/compilation\n• OOP concepts\n• Hotel booking process\n• Room types\n• Translation features"
+            );
+        }
+        
+        // Best match response
+        SimilarityEngine.MatchResult best = matches.get(0);
+        String confidence = String.format(" (Confidence: %.0f%%)", best.score * 100);
+        
+        return new ChatResponse(
+            " Best Answer" + confidence,
+            best.faq.getAnswer()
+        );
+    }
+}
+
+class ChatResponse {
+    private String title;
+    private String content;
+    
+    public ChatResponse(String title, String content) {
+        this.title = title;
+        this.content = content;
+    }
+    
+    public String formatForDisplay() {
+        return String.format("%s\n\n%s", title, content);
+    }
+}
+
+// SECTION 5: CHAT UI INTERFACE - Professional conversation interface
+class FAQChatUI extends JFrame {
+    private FAQChatInterface chatInterface;
+    private JTextField inputField;
+    private IntelligentFAQBot bot;
+    
+    public FAQChatUI() {
+        bot = new IntelligentFAQBot();
+        initializeUI();
+        displayWelcome();
+    }
+    
+    private void initializeUI() {
+        setTitle(" Intelligent FAQ Chatbot v2.0 - NLP Powered");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(900, 700);
+        setLocationRelativeTo(null);
+        
+        chatInterface = new FAQChatInterface();
+        
+        inputField = new JTextField();
+        inputField.setFont(new Font("Segoe UI", Font.BOLD, 15));
+        inputField.addActionListener(e -> processUserInput());
+        
+        JPanel inputPanel = new JPanel(new BorderLayout());
+        inputPanel.add(new JLabel(" Ask a question: "), BorderLayout.WEST);
+        inputPanel.add(inputField, BorderLayout.CENTER);
+        
+        setLayout(new BorderLayout(5, 5));
+        add(chatInterface.getScrollPane(), BorderLayout.CENTER);
+        add(inputPanel, BorderLayout.SOUTH);
+        
+        getContentPane().setBackground(new Color(248, 249, 250));
+    }
+    
+    private void displayWelcome() {
+        chatInterface.addMessage(" FAQ Assistant", 
+            "Hello! I'm an intelligent FAQ bot powered by NLP similarity matching.\n\n" +
+            "💡 I know about:\n" +
+            "• Java programming (installation, OOP, compilation)\n" +
+            "• Hotel booking system (reservations, cancellations)\n" +
+            "• Translation tool features\n\n" +
+            "Ask away or type 'stats' for system info! 🚀");
+    }
+    
+    private void processUserInput() {
+        String query = inputField.getText().trim();
+        if (query.isEmpty()) return;
+        
+        // User message
+        chatInterface.addMessage(" You", query);
+        inputField.setText("");
+        
+        // Bot response
+        ChatResponse response = bot.processUserQuery(query);
+        chatInterface.addMessage(" FAQ Bot", response.formatForDisplay());
+    }
+}
+
+class FAQChatInterface extends JScrollPane {
+    private JTextPane chatPane;
+    private StyledDocument doc;
+    
+    public FAQChatInterface() {
+        chatPane = new JTextPane();
+        doc = chatPane.getStyledDocument();
+        chatPane.setEditable(false);
+        chatPane.setFont(new Font("Consolas", Font.PLAIN, 14));
+        chatPane.setBackground(new Color(25, 25, 35));
+        chatPane.setForeground(new Color(220, 220, 255));
+        setViewportView(chatPane);
+    }
+    
+    public void addMessage(String sender, String message) {
+        try {
+            doc.insertString(doc.getLength(), "\n", null);
+            doc.insertString(doc.getLength(), sender + ": ", null);
+            doc.insertString(doc.getLength(), message + "\n\n", null);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        chatPane.setCaretPosition(doc.getLength());
+    }
+    
+    public JScrollPane getScrollPane() { return this; }
+}
+
+// SECTION 6: APPLICATION LAUNCHER
+public class AdvancedFAQChatbot {
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            try {
+                UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            } catch (Exception ignored) {}
+            
+            new FAQChatUI().setVisible(true);
+        });
+    }
+}
